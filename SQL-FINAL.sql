@@ -1,22 +1,22 @@
 ﻿
 --CREATE DATABASE-------------------------------------------------------------------------------------------------
---CREATE DATABASE Library_Management
---ON
---( NAME = Library_Management_dat,
---	FILENAME = 'C:\Program Files\Microsoft SQL Server\MSSQL16.SQLEXPRESS\MSSQL\DATA\library_management_dat.mdf',
---SIZE = 20MB,
---MAXSIZE = 50
---)
---LOG ON
---( NAME = Library_Management_log,
---	FILENAME = 'C:\Program Files\Microsoft SQL Server\MSSQL16.SQLEXPRESS\MSSQL\DATA\library_management_log.ldf',
---	SIZE = 20MB,
---MAXSIZE = 50
---)
+CREATE DATABASE Library_Management
+ON
+( NAME = Library_Management_dat,
+	FILENAME = 'C:\Program Files\Microsoft SQL Server\MSSQL16.SQLEXPRESS\MSSQL\DATA\library_management_dat.mdf',
+SIZE = 20MB,
+MAXSIZE = 50
+)
+LOG ON
+( NAME = Library_Management_log,
+	FILENAME = 'C:\Program Files\Microsoft SQL Server\MSSQL16.SQLEXPRESS\MSSQL\DATA\library_management_log.ldf',
+	SIZE = 20MB,
+MAXSIZE = 50
+)
 -----------------------------------------------------------------------------------------------------------------
 
 --CREATE TABLE---------------------------------------------------------------------------------------------------
-USE Library_Management;
+
 
 --LIBRARIANS
 CREATE TABLE Librarians( 
@@ -129,8 +129,12 @@ INSERT INTO Authors (AuthorName, DateOfBirth, WrittenBooks, Category, Informatio
 ('Liam Johnson', '1985-07-22', 'Digital Marketing', 'Business', 'Marketing consultant and speaker', 'American'),
 ('Ava Clark', '1997-04-02', 'Modern Architecture', 'Design', 'Architect with modern design focus', 'Australian'),
 ('Elijah Green', '1989-08-19', 'Gardening Basics', 'Hobby', 'Gardening enthusiast and blogger', 'Canadian');
------------------------------------------------------------------------------------------------------------------
-
+-------------------------------------------------------------------------------------------------------------------
+SELECT * FROM Librarians;
+SELECT * FROM Books;
+SELECT * FROM Library;
+SELECT * FROM Sales;
+SELECT * FROM Authors;
 --CREATE VIEWS---------------------------------------------------------------------------------------------------
 
 --LIBRARY MANAGEMENT
@@ -211,21 +215,18 @@ FROM Sales AS S
 JOIN Librarians AS L ON S.LibrariansID = L.LibrariansID
 JOIN Books b ON S.BookName = B.BookName;
 
------------------------------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------------------------------
+SELECT * FROM LibraryManagement;
+SELECT * FROM AuthorsInformation;
+SELECT * FROM SoldProduct;
 
 --PROCEDURES ----------------------------------------------------------------------------------------------------
 --LibraryManagement
+USE Library_Management;
 GO
 CREATE PROCEDURE getLibraryManagement
-AS
-BEGIN
-    SELECT * 
-    FROM LibraryManagement;
-END;
-GO
-CREATE PROCEDURE getLibraryManagementS
-    @LibrarianId INT = NULL,
-    @Category VARCHAR(50) = NULL
+    @LibrarianId INT,
+    @Category VARCHAR(50)
 AS
 BEGIN
     SELECT 
@@ -242,7 +243,6 @@ BEGIN
     ORDER BY BorrowedDate DESC;
 END;
 GO
-
 
 
 --AuthorsInformation
@@ -273,20 +273,19 @@ BEGIN
       AND (@MaxPrice IS NULL OR Price <= @MaxPrice);
 END;
 GO
-
+ 
 --CHECK PROCEDURES
--- Get all library management data
-EXEC getLibraryManagement @LibrarianId = 2, @Category = 'Fiction';
+--Library Management
+EXEC getLibraryManagement @LibrarianId = 6, @Category = 'Database';
 
--- Get authors who are 'American' and in 'Programming'
+--Authors Info
 EXEC GetAuthorsInformation @Nationality = 'American', @Category = 'Programming';
 
--- Get sold products with price between 25 and 30
+--Products Sold
 EXEC GetSoldProduct @MinPrice = 25, @MaxPrice = 30;
------------------------------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------------------------------
 
 --FUNCTIONS -----------------------------------------------------------------------------------------------------
-
 -- FULLNAME
 GO
 CREATE FUNCTION dbo.LibrariansFullName(@LibrarianID INT)
@@ -300,31 +299,26 @@ BEGIN
     RETURN @FullName;
 END
 
--- CHECK
-SELECT dbo.LibrariansFullName(1) AS FullName;
-
-
 -- STORE
 GO
-CREATE FUNCTION dbo.SoldProduct(@LibrariansID INT)
+CREATE OR ALTER FUNCTION dbo.SoldProducts(@LibrariansID INT)
 RETURNS DECIMAL(10,2)
 AS
 BEGIN
-DECLARE
-	@BookName VARCHAR(50),
-	@Quantity INT,
-	@Price DECIMAL(10,2),
-	@Total DECIMAL(10,2)
-SET @Total = SUM(@Quantity * @Price)
-SELECT @BookName = BookName
-FROM Sales
-WHERE @LibrariansID = LibrariansID
-RETURN @Total;
+    DECLARE @Total DECIMAL(10,2);
+    SELECT @Total = SUM(Quantity * Price)
+    FROM Sales
+    WHERE LibrariansID = @LibrariansID;
+    RETURN @Total;
 END
+GO
 
 -- CHECK
-SELECT dbo.SoldProduct(5) AS TotalSales;
--------------------------------------------------------------------------------------------------------
+SELECT dbo.LibrariansFullName(1) AS FullName;
+
+-- CHECK
+SELECT dbo.SoldProducts(9) AS TotalSales;
+---------------------------------------------------------------------------------------------------------
 
 --ERROR HANDLING---------------------------------------------------------------------------------------
 GO
@@ -342,9 +336,7 @@ BEGIN
 
         INSERT INTO Sales (LibrariansID, BookName, Price, Quantity)
         VALUES (@librariansID, @bookName, @price, @quantity);
-
         COMMIT TRANSACTION;
-
         SELECT 'Inserted into Sales without any error.' AS ResultMessage;
     END TRY
     BEGIN CATCH
@@ -365,7 +357,7 @@ EXEC librariansCheck 3, 'SQL for Beginners', 24.99, 5;
 -- Error case (Quantity <= 0 not allowed)
 EXEC librariansCheck 3, 'SQL for Beginners', 24.99, 0;
 
--------------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------------
 
 --COMMIT AND ROLLBACK ----------------------------------------------------------------------------------
 CREATE LOGIN viewtableSales WITH PASSWORD = 'salesViewers',
@@ -374,7 +366,7 @@ GO
 CREATE USER viewers FOR LOGIN viewtableSales;
 GO
 
-GRANT SELECT, INSERT, UPDATE, DELETE ON OBJECT::[dbo].[Sales] TO viewtableSales;
+GRANT SELECT, INSERT, UPDATE, DELETE ON OBJECT::[dbo].[Sales] TO viewer;
 GO
 
 SET IMPLICIT_TRANSACTIONS ON;
@@ -384,7 +376,7 @@ BEGIN TRANSACTION
 DELETE FROM Sales where BookName = 'SQL for Beginners';
 
 ROLLBACK TRANSACTION;
--------------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------------
 
 --TIGGER ----------------------------------------------------------------------------------------------
 
@@ -394,7 +386,7 @@ UserChange VARCHAR(100) DEFAULT SUSER_SNAME(),TimeEdit DATETIME DEFAULT GETDATE(
 
 GO
 CREATE TRIGGER sales_tracking_log
-ON dbo.Sales_Library
+ON dbo.Sales_tracking
 AFTER UPDATE
 AS
 BEGIN
@@ -426,7 +418,7 @@ WHERE LibrariansID = 1;
 DELETE FROM Sales_tracking WHERE LoginID = 2;
 
 SELECT * FROM Sales_tracking;
--------------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------------
 
 --ROLE AND PERMISSION----------------------------------------------------------------------------------
 
@@ -446,33 +438,43 @@ GRANT SELECT ON OBJECT::[dbo].[Librarians] TO Manager;
 GRANT SELECT, UPDATE, DELETE ON OBJECT::[dbo].[Authors] TO Manager;
 GRANT SELECT, UPDATE, DELETE ON OBJECT::[dbo].[Books] TO Manager;
 GO
--------------------------------------------------------------------------------------------------------
-
+---------------------------------------------------------------------------------------------------------
+--USE Product_MGM;
 --BACKUP AND RESTORE-----------------------------------------------------------------------------------
 --FULL BACKUP
-ALTER DATABASE [Library_Management] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+BACKUP DATABASE Library_Management
+TO DISK = 'C:\Program Files\Microsoft SQL Server\MSSQL16.SQLEXPRESS\MSSQL\Backup\Library_Management.bak';
+
+--RESTORE
+RESTORE DATABASE Library_Management
+FROM DISK = 'C:\Program Files\Microsoft SQL Server\MSSQL16.SQLEXPRESS\MSSQL\Backup\Library_Management.bak'
+WITH RECOVERY;
+
+
+USE Product_MGM;
+--DIFFERENTIAL
+BACKUP DATABASE Library_Management
+TO DISK = 'C:\Program Files\Microsoft SQL Server\MSSQL16.SQLEXPRESS\MSSQL\Backup\Library_Management.bak'
+WITH DIFFERENTIAL,  
+NAME = 'Differential Backup of Library_Management',  
+SKIP,
+NOREWIND,
+NOUNLOAD,
+STATS = 10;
+
+--RESTORE
+RESTORE DATABASE Library_Management
+FROM DISK = 'C:\Program Files\Microsoft SQL Server\MSSQL16.SQLEXPRESS\MSSQL\Backup\Library_Management.bak'
+WITH
+MOVE 'Library_Management_dat' TO 'C:\Program Files\Microsoft SQL Server\MSSQL16.SQLEXPRESS\MSSQL\DATA\Library_Management_dat.mdf',
+MOVE 'Library_Management_log' TO 'C:\Program Files\Microsoft SQL Server\MSSQL16.SQLEXPRESS\MSSQL\DATA\Library_Management_log.ldf',
+NORECOVERY, 
+REPLACE, 
+STATS = 10;
+
+--DROP DB
+ALTER DATABASE [Library_Management] set single_user WITH ROLLBACK IMMEDIATE;
 GO
 DROP DATABASE [Library_Management];
 GO
-
---RESTORE
-RESTORE DATABASE Library_Management
-FORM DISK = 'C:\Program Files\'
-WITH
-MOVE 'Library_Management' TO 'C:\Program Files\',
-MOVE 'Library_Management_log' TO 'C:\Program Files\',
-NORECOVERY
-STATS=10
-
---DIFFERENTIAL
-BACKUP DATABASE Library_Management
-TO DISK = 'C:\Program Files\'
-WITH DIFFERENTIAL,  
-     NAME = 'Differential Backup of Library_Management',  
-     SKIP, NOREWIND, NOUNLOAD, STATS = 10;
-
---RESTORE
-RESTORE DATABASE Library_Management
-FROM DISK = 'C:\Program Files\'
-WITH RECOVERY;
--------------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------------
